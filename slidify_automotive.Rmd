@@ -25,6 +25,170 @@ prices received by domestic producers for their output."
 
 ## The Series
 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=13, fig.height=7}
+library(Quandl)
+library(ggplot2)
+library(ggfortify)
+library(forecast)
+library(gridExtra)
+library(xts)
+library(xtable)
+library(MASS)
+library(car)
+library(tsoutliers)
+library(cpm)
 
 
+Quandl.api_key("Z9Dr3iK6S8q8cuSzomkX")
+# Reading in data from Quandl
+us_automotive <- Quandl("BLSI/WPU1411")
+# Reversing ordering of time (earliest dates first)
+us_automotive <- us_automotive[order(us_automotive$Date, -as.numeric(us_automotive$Date)), ]
 
+r_squared <- function(y, y_hat) {
+  # Here we are calculating the r-squared
+  # value for our models
+  
+  # Storing the mean of the sample
+  y_mean <- mean(y)
+  # 
+  numerator <- sum( (y-y_hat)^2 )
+  denominator <- sum( (y-y_mean)^2 )
+  
+  r_squared <- 1 - (numerator/denominator)
+  return(r_squared)
+}
+
+time_index <- seq(from = as.POSIXct("1994-01-01"),to = as.POSIXct("2016-03-01"), by = "month")
+prices_xts <- xts(us_automotive$Value, order.by = time_index)
+
+# Creating a time series object 
+producer_prices <- ts(us_automotive$Value, start = c(1994,1), end = c(2016,3), frequency = 12)
+# Subsetting the series as a 
+train <- window(producer_prices, start = 1994, end = 2014)
+test <- window(producer_prices, start = 2015)
+
+# Plotting the time series
+autoplot(train, main = "Motor Vehicle Producer Price Index")
+```
+
+---
+
+## ACF and PACF of the Series
+
+```{r, ACF, fig.keep='none', echo=FALSE}
+# ACF plot
+acf_plot <- autoplot( acf(train), main = "ACF Plot" )
+```
+
+```{r, PACF, fig.keep='none', echo=FALSE}
+# PACF plot
+pacf_plot <- autoplot( pacf(train), main = "PACF Plot")
+```
+
+```{r, ACF & PACF plots, fig.keep='last', fig.height=7, fig.width=13, echo=FALSE}
+# Plotting both ACF and PACF plots
+grid.arrange(acf_plot, pacf_plot, ncol=2)
+```
+
+---
+
+## Series Decomposition
+
+```{r, echo=FALSE, fig.width=13, fig.height=7}
+decomposition <- stl(train, "periodic")
+# Plotting seasonal decomposition
+autoplot(decomposition)
+```
+
+---
+
+## A Closer Look at Seasonality
+
+```{r, fig.keep='last', fig.height=7, fig.width=13, echo=FALSE}
+us_automotive$month <- factor(strftime(us_automotive$Date,"%b"),levels=month.abb)
+# Boxplot of seasonal data
+ggplot(us_automotive, aes(x = month, y = Value), main = "Seasonal Boxplots") + geom_boxplot()
+```
+
+---
+
+## Holt-Winter's Exponential Smoothing Model
+
+```{r, echo=FALSE, fig.width=13, fig.height=7}
+# Creating Holt-Winters' model
+holt_winters <- hw(train)
+# Creating forecast 15 periods out
+holt_winters_forecast <- forecast(holt_winters, h = 15)
+# Plotting the smoothing model
+autoplot(holt_winters_forecast, main = "Holt-Winters Exponential Smoothing Model")
+
+# Storing accuracy measures for model
+accuracy_holt_winters <- as.data.frame(accuracy(holt_winters_forecast, test))
+# Saving R-squared for training and test
+accuracy_holt_winters$r_squared[1] <- r_squared(train, holt_winters$fitted)
+accuracy_holt_winters$r_squared[2] <- NA
+colnames(accuracy_holt_winters)[9] <- "R-squared"
+```
+
+---
+
+## State Space Model
+
+```{r, echo=FALSE, fig.width=13, fig.height=7}
+# Creating state space model
+state_space <- ets(train)
+# Plotting the state space model
+#autoplot(state_space, main = "State Space Model")
+# Creating forecast
+state_space_forecast <- forecast(state_space, h=13)
+# Plotting forecast
+autoplot(state_space_forecast, main = "State Space Model Forecast")
+
+# Storing accuracy measures of model
+accuracy_state_space <- as.data.frame( accuracy(state_space_forecast, test) )
+# Caculating R-squared for training and test
+accuracy_state_space$r_squared[1] <- r_squared(train, state_space$fitted)
+accuracy_state_space$r_squared[2] <- r_squared(test, state_space_forecast$mean)
+colnames(accuracy_state_space)[9] <- "R-squared"
+```
+
+---
+
+## Seasonal Arima Model
+
+```{r, echo=FALSE, fig.width=13, fig.height=7}
+# Fitting a seasonal Arima model
+arima_model <- auto.arima(train) 
+# Plotting the model
+#autoplot(arima_model, main = "Seasonal Arima Model")
+# Creating forecast
+arima_forecast <- forecast(arima_model, h=15)
+# Plotting forecast
+autoplot(arima_forecast, main = "Seasonal ARIMA Model Forecast")
+
+# Storing accuracy measures
+accuracy_arima <- as.data.frame( accuracy(arima_forecast, test) )
+# Finding R-squared for training and test
+accuracy_arima$r_squared[1] <- r_squared(train, arima_model$x)
+accuracy_arima$r_squared[2] <- r_squared(test, arima_forecast$mean)
+colnames(accuracy_arima)[9] <- "R-squared"
+```
+
+--- 
+
+## Model Evaluations
+
+```{r, results='asis', message=FALSE, fig.width=13, fig.height=7, echo=FALSE}
+print( xtable(accuracy_holt_winters, caption = "Holt-Winter's Model Accuracy Measures"), type = 'html')
+```
+
+```{r, results='asis', message=FALSE, fig.width=13, fig.height=7, echo=FALSE}
+print( xtable(accuracy_state_space, caption = "State Space Model Accuracy Measures"), type = 'html')
+```
+
+```{r, results='asis', message=FALSE, echo=FALSE}
+print( xtable(accuracy_arima, caption = "Seasonal Arima Model Accuracy Measures"), type = 'html')
+```
+
+---

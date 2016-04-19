@@ -1,0 +1,7 @@
+name: Publish Document
+account: rpubs
+server: rpubs.com
+bundleId:
+        https://api.rpubs.com/api/v1/document/172423/ec12f04bac934d498ede78a7d65ec46c
+url: http://rpubs.com/YoungTodd/172423
+when: 1461041239.41232
